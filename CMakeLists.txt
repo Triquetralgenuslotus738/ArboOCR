@@ -11,7 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ARBOOCR_USE_SYSTEM_DEPS "Use apt packages + vendored onnxruntime (Jetson/aarch64)" OFF)
 set(ARBOOCR_ORT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/vendor/onnxruntime/dist/include"
     CACHE PATH "onnxruntime C++ headers (system-deps mode)")
-set(ARBOOCR_ORT_LIB_DIR "" CACHE PATH "Directory containing libonnxruntime.so (system-deps mode)")
+set(ARBOOCR_ORT_LIB_DIR "${CMAKE_SOURCE_DIR}/vendor/onnxruntime/lib"
+    CACHE PATH "Directory containing libonnxruntime.so (system-deps mode) — defaults to the vendored copy")
 
 find_package(doctest CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
@@ -22,8 +23,9 @@ if(ARBOOCR_USE_SYSTEM_DEPS)
     endif()
     find_package(OpenCV REQUIRED)
     find_package(CURL REQUIRED)
-    if(ARBOOCR_ORT_LIB_DIR STREQUAL "")
-        message(FATAL_ERROR "ARBOOCR_USE_SYSTEM_DEPS=ON requires -DARBOOCR_ORT_LIB_DIR=<dir with libonnxruntime.so>")
+    if(ARBOOCR_ORT_LIB_DIR STREQUAL "" OR NOT EXISTS "${ARBOOCR_ORT_LIB_DIR}")
+        message(FATAL_ERROR "ARBOOCR_USE_SYSTEM_DEPS=ON needs libonnxruntime.so in ${ARBOOCR_ORT_LIB_DIR} "
+            "(vendor it there, or pass -DARBOOCR_ORT_LIB_DIR=<dir> to point elsewhere — see README)")
     endif()
 else()
     find_package(onnxruntime CONFIG REQUIRED)

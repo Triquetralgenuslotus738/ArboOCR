@@ -52,23 +52,33 @@ cmake --build build/linux-x64
 
 ### Jetson / aarch64 (system deps + CUDA/TensorRT onnxruntime)
 
-vcpkg is impractical on a Jetson. Use apt packages + a vendored onnxruntime
-header set, and point the build at a CUDA/TensorRT-enabled `libonnxruntime.so`
-(e.g. the one shipped in a `rapidocr`/onnxruntime Python install):
+vcpkg is impractical on a Jetson. Use apt packages + a fully self-contained
+vendored onnxruntime (headers **and** the CUDA/TensorRT-enabled runtime
+`.so`, both under `vendor/onnxruntime/`) — arboOCR doesn't depend on any
+other project's Python venv once this is done:
 
 ```bash
 sudo apt install -y libopencv-dev libcurl4-openssl-dev doctest-dev cxxopts-dev cmake build-essential
 
-# onnxruntime C++ headers (the pip wheel ships none). Use the latest release
-# tarball whose headers are ABI-compatible with your installed runtime — e.g.
+# 1. onnxruntime C++ headers (the pip wheel ships none). Use the latest
+# release tarball whose headers are ABI-compatible with your runtime — e.g.
 # v1.27.1 headers work against a 1.28.x runtime .so (the C API is stable):
 mkdir -p vendor/onnxruntime && cd vendor/onnxruntime
 curl -sL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.27.1/onnxruntime-linux-aarch64-1.27.1.tgz
 tar xzf ort.tgz && rm ort.tgz && mv onnxruntime-linux-aarch64-1.27.1 dist
+
+# 2. onnxruntime runtime .so with CUDA/TensorRT support. The official aarch64
+# release tarball above is CPU-only — the pip wheel (`pip install onnxruntime`,
+# or JetPack's preinstalled one) ships the accelerated build instead. Copy it
+# in (adjust SRC to wherever onnxruntime is installed on your machine):
+SRC=/path/to/your/onnxruntime/capi   # e.g. a venv's site-packages/onnxruntime/capi
+mkdir -p lib
+cp "$SRC"/libonnxruntime.so.* "$SRC"/libonnxruntime_providers_*.so lib/
+ln -sf $(basename "$SRC"/libonnxruntime.so.*.*.*) lib/libonnxruntime.so.1
+ln -sf $(basename "$SRC"/libonnxruntime.so.*.*.*) lib/libonnxruntime.so
 cd ../..
 
-cmake --preset jetson \
-  -DARBOOCR_ORT_LIB_DIR=/path/to/onnxruntime/lib/dir
+cmake --preset jetson   # ARBOOCR_ORT_LIB_DIR defaults to vendor/onnxruntime/lib
 cmake --build build/jetson -j$(nproc)
 ```
 
