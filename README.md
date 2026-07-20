@@ -117,19 +117,18 @@ Two ways to provide them:
 `modelType` (`tiny` | `small` | `medium`) selects the **recognizer** size
 only — the detector is always the single `PP-OCRv6_det.onnx` file, no size
 variant exists for it. Measured on the bundled sample receipt
-(`tests/fixtures/test_images/`), CPU backend, Jetson Nano:
+(`tests/fixtures/test_images/`), Jetson Nano (see "Recognizer batching"
+below — these numbers are post-batching):
 
-| modelType | Recognizer file size | Latency | Sample errors |
+| modelType | Recognizer file size | Latency (CPU) | Sample errors |
 |---|---|---|---|
-| `tiny` (old default) | 4.3MB | ~750ms | "Melavwai" instead of "Melawai", "Atasnama" instead of "Atas nama" |
-| `medium` (**current default**) | 73MB | ~3.9s | both fixed, no new errors introduced |
+| `tiny` (old default) | 4.3MB | ~750ms-1s | "Melavwai" instead of "Melawai", "Atasnama" instead of "Atas nama" |
+| `medium` (**current default**) | 73MB | ~5s | both fixed, no new errors introduced |
 
 `tiny` genuinely misreads characters under real-world noise (scan artifacts,
 low contrast); `medium` fixed every misread we found in that pass without
-introducing new ones, at roughly 5x the CPU latency. TensorRT/CUDA narrow
-that latency gap significantly (the `tiny` config alone dropped from ~750ms
-CPU to ~360ms TensorRT in our Jetson tests) — worth re-measuring
-`medium` under TensorRT/CUDA for your own hardware if 3.9s CPU is too slow.
+introducing new ones. TensorRT/CUDA narrow the latency gap significantly and
+also benefit more from batching than CPU does — see below.
 
 We also tried the analogous swap on the **detector** (`PP-OCRv6_det_medium.onnx`
 in place of the tiny/default det file) and got a *worse* result: 6x slower
@@ -143,6 +142,25 @@ occasional misreads (or you're running under TensorRT/CUDA where the gap
 matters less); pick `medium` (default) for the most accurate output; `small`
 is an untested middle ground worth trying if `medium` is too slow for your
 budget.
+
+### Recognizer batching
+
+`Recognizer::getTextLines()` batches up to 6 text-line crops per ONNXRuntime
+call (mirrors PaddleOCR/RapidOCR's `rec_batch_num=6` default) instead of one
+call per crop. Measured on the bundled sample receipt (31 text lines),
+Jetson Nano:
+
+| Backend | Before batching | After batching |
+|---|---|---|
+| CPU (medium) | ~3.9s | ~5.0s (**slower**) |
+| TensorRT (tiny) | ~456ms | ~340-400ms (**faster**) |
+
+CPU has no real parallelism across the batch dimension, so padding every
+crop up to its batch's shared width is pure wasted computation there —
+batching made CPU inference *slower* in our measurement, not faster.
+TensorRT/GPU backends can actually parallelize across the batch dimension,
+where batching pays off. There's currently no config flag to disable
+batching if you're CPU-only and this trade-off doesn't work in your favor.
 
 ## API
 

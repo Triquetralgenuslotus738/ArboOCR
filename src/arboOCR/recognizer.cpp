@@ -5,6 +5,7 @@
 #include "arboOCR/recognizer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <numeric>
 #include <sstream>
@@ -34,11 +35,15 @@ void Recognizer::loadModel(const std::string& modelPath, bool useCuda,
     sessionOptions_.SetIntraOpNumThreads(0);
     sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-    // Height is fixed at kDstHeight=48; width varies with crop aspect ratio.
-    // Pin one profile range so ORT TRT never rebuilds per-shape (see
-    // TENSORRT_ENGINE_PORT_PLAN.md Opsi 1).
+    // Height is fixed at kDstHeight=48; width and batch size vary (batching
+    // up to kRecBatchNum=6 crops per call — see getTextLines()). Opt/max
+    // batch dim is 6 to match, so ORT TRT builds one engine that covers the
+    // real runtime batch sizes instead of rebuilding per-shape (matches
+    // this project's own documented profile in TENSORRT_ENGINE_PORT_PLAN.md
+    // Opsi 1 table: rec opt=(6,3,48,320), max=(6,3,48,2048) — previously
+    // pinned at batch=1 here, before batching was implemented).
     detail::configureExecutionProviders(sessionOptions_, useCuda, useTensorrt, trtCacheDir,
-        {"x:1x3x48x32", "x:1x3x48x320", "x:1x3x48x2048"});
+        {"x:1x3x48x32", "x:6x3x48x320", "x:6x3x48x2048"});
 
 #ifdef _WIN32
     std::wstring wpath(modelPath.begin(), modelPath.end());
@@ -134,23 +139,63 @@ RawTextLine Recognizer::scoreToTextLine(const std::vector<float>& outputData, si
     return {text, scores};
 }
 
-RawTextLine Recognizer::getTextLine(const cv::Mat& src) {
-    if (!session_) {
-        return {"", {}}; // guard: unloaded model
-    }
-    if (src.empty() || src.rows <= 0) {
-        return {"", {}}; // guard: e.g. a degenerate crop upstream (getRotateCropImage)
-    }
-    float scale = static_cast<float>(kDstHeight) / static_cast<float>(src.rows);
-    int dstWidth = static_cast<int>(static_cast<float>(src.cols) * scale);
-    cv::Mat resized;
-    cv::resize(src, resized, cv::Size(dstWidth, kDstHeight));
+std::vector<float> Recognizer::buildBatchTensor(const std::vector<cv::Mat>& resizedCrops, int batchWidth) const {
+    int batchSize = static_cast<int>(resizedCrops.size());
+    // meanValues_/normValues_ are 3-element (BGR) — every crop must be
+    // 3-channel for the per-channel plane math below to be valid. getTextLines()
+    // only forwards 3-channel crops here (see its channel-count guard);
+    // this is asserted rather than silently handled because a caller
+    // reaching this private method with mixed channel counts is a bug in
+    // this file, not user input to degrade gracefully on.
+    const int channels = 3;
+    std::vector<float> batchInput(static_cast<size_t>(batchSize) * channels * kDstHeight * batchWidth, 0.0f);
+    // Build the batch tensor: each crop is normalized FIRST, then copied
+    // into a zero-initialized batchWidth-wide slot. Padding is 0.0 in
+    // NORMALIZED float space — NOT a pre-normalization pixel value (raw
+    // pixel 0 would normalize to -1.0 under this project's mean/norm
+    // constants, a different value). This exact order (normalize, then
+    // pad) matches upstream PaddleOCR/RapidOCR's resize_norm_img.
+    size_t cropPlaneSize = static_cast<size_t>(kDstHeight) * batchWidth; // per-channel plane size in the PADDED buffer
+    size_t cropStride = cropPlaneSize * channels;
 
-    auto inputValues = substractMeanNormalize(resized, meanValues_, normValues_);
-    std::array<int64_t, 4> inputShape{1, resized.channels(), resized.rows, resized.cols};
+    for (int b = 0; b < batchSize; b++) {
+        const cv::Mat& crop = resizedCrops[b];
+        auto normalized = substractMeanNormalize(crop, meanValues_, normValues_); // CHW, row-major, crop.cols wide
+        size_t normPlaneSize = static_cast<size_t>(crop.cols) * kDstHeight;
+        float* dst = batchInput.data() + b * cropStride;
+        // Copy ROW BY ROW, not as one contiguous block per channel: the
+        // source plane is `kDstHeight` rows of `crop.cols` floats each
+        // (packed, no gaps), but the destination plane is `kDstHeight` rows
+        // of `batchWidth` floats each (crop.cols <= batchWidth, guaranteed
+        // by the caller). A single contiguous copy would misalign every
+        // row after the first whenever crop.cols != batchWidth — this was
+        // an actual bug caught by real-model inference testing on Jetson
+        // (produced garbled/wrong text), not just a theoretical concern.
+        // test_recognizer.cpp now exercises this directly (no model needed)
+        // so a regression here is caught by `ctest`, not just hardware runs.
+        for (int ch = 0; ch < channels; ch++) {
+            const float* srcPlane = normalized.data() + ch * normPlaneSize;
+            float* dstPlane = dst + ch * cropPlaneSize;
+            for (int row = 0; row < kDstHeight; row++) {
+                std::copy(srcPlane + row * crop.cols, srcPlane + row * crop.cols + crop.cols,
+                          dstPlane + row * batchWidth);
+                // remaining (batchWidth - crop.cols) columns in this row
+                // stay 0.0 from batchInput's initialization above.
+            }
+        }
+    }
+
+    return batchInput;
+}
+
+std::vector<RawTextLine> Recognizer::runBatchInference(const std::vector<cv::Mat>& resizedCrops, int batchWidth) {
+    int batchSize = static_cast<int>(resizedCrops.size());
+    std::vector<float> batchInput = buildBatchTensor(resizedCrops, batchWidth);
+
+    std::array<int64_t, 4> inputShape{batchSize, 3, kDstHeight, batchWidth};
     auto memInfo = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
     Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-        memInfo, inputValues.data(), inputValues.size(), inputShape.data(), inputShape.size());
+        memInfo, batchInput.data(), batchInput.size(), inputShape.data(), inputShape.size());
 
     std::vector<const char*> inputNames = {inputNamesPtr_.front().get()};
     std::vector<const char*> outputNames = {outputNamesPtr_.front().get()};
@@ -158,20 +203,120 @@ RawTextLine Recognizer::getTextLine(const cv::Mat& src) {
         Ort::RunOptions{nullptr}, inputNames.data(), &inputTensor, 1, outputNames.data(), 1);
 
     auto outShape = outputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
-    if (outShape.size() < 3 || outShape[1] <= 0 || outShape[2] <= 0) {
-        return {"", {}}; // guard: model output isn't the expected [batch, T, classes] shape
+    if (outShape.size() < 3 || outShape[0] <= 0 || outShape[1] <= 0 || outShape[2] <= 0) {
+        return std::vector<RawTextLine>(resizedCrops.size(), RawTextLine{"", {}});
+        // guard: model output isn't the expected [batch, T, classes] shape
     }
-    int64_t outCount = std::accumulate(outShape.begin(), outShape.end(), int64_t{1}, std::multiplies<int64_t>());
+
+    int64_t outBatch = outShape[0];
+    int64_t timeSteps = outShape[1];
+    int64_t numClasses = outShape[2];
+    int64_t perItemCount = timeSteps * numClasses;
+    int64_t outCount = outBatch * perItemCount;
     float* raw = outputTensors.front().GetTensorMutableData<float>();
-    std::vector<float> outputData(raw, raw + outCount);
-    return scoreToTextLine(outputData, outShape[1], outShape[2]);
+
+    std::vector<RawTextLine> results;
+    results.reserve(resizedCrops.size());
+    // CTC-decode the full padded width per row, unconditionally — no
+    // truncation/masking by each crop's real (unpadded) width. This relies
+    // on the trained CRNN model emitting the CTC blank token in padding
+    // columns; upstream does the same (confirmed by absence of masking
+    // code there — see getTextLines() doc comment).
+    for (int64_t b = 0; b < outBatch && b < static_cast<int64_t>(resizedCrops.size()); b++) {
+        int64_t offset = b * perItemCount;
+        if (offset + perItemCount > outCount) break; // guard: short buffer
+        std::vector<float> rowData(raw + offset, raw + offset + perItemCount);
+        results.push_back(scoreToTextLine(rowData, static_cast<size_t>(timeSteps), static_cast<size_t>(numClasses)));
+    }
+    while (results.size() < resizedCrops.size()) {
+        results.push_back({"", {}}); // guard: model returned fewer rows than requested
+    }
+    return results;
+}
+
+std::vector<RawTextLine> Recognizer::runBatch(const std::vector<cv::Mat>& resizedCrops, int batchWidth) {
+    try {
+        return runBatchInference(resizedCrops, batchWidth);
+    } catch (const Ort::Exception&) {
+        // Fallback for a non-standard custom model that doesn't accept
+        // dynamic batch size (every official PP-OCR model does — see
+        // TENSORRT_ENGINE_PORT_PLAN.md's documented rec profile,
+        // opt=(6,3,48,320) — this path exists for robustness against
+        // arbitrary user-supplied models, not because official models hit it).
+        std::vector<RawTextLine> results;
+        results.reserve(resizedCrops.size());
+        for (auto& crop : resizedCrops) {
+            std::vector<cv::Mat> single{crop};
+            auto oneResult = runBatchInference(single, crop.cols);
+            results.push_back(oneResult.empty() ? RawTextLine{"", {}} : oneResult.front());
+        }
+        return results;
+    }
 }
 
 std::vector<RawTextLine> Recognizer::getTextLines(std::vector<cv::Mat>& partImages) {
-    std::vector<RawTextLine> lines(partImages.size());
-    for (size_t i = 0; i < partImages.size(); i++) {
-        lines[i] = getTextLine(partImages[i]);
+    size_t n = partImages.size();
+    std::vector<RawTextLine> lines(n);
+    if (!session_ || n == 0) {
+        return lines; // guard: unloaded model, or nothing to do
     }
+
+    // 1. Sort indices by ascending aspect ratio (width/height), same as
+    // upstream — groups similarly-shaped crops together so each batch's
+    // shared width wastes less padding. Degenerate (empty/zero-size) crops
+    // sort first (ratio 0) and are filtered out per-item below, not batched.
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        auto ratio = [](const cv::Mat& m) {
+            return (m.empty() || m.rows <= 0) ? 0.0 : static_cast<double>(m.cols) / m.rows;
+        };
+        return ratio(partImages[a]) < ratio(partImages[b]);
+    });
+
+    for (size_t groupStart = 0; groupStart < n; groupStart += kRecBatchNum) {
+        size_t groupEnd = std::min(groupStart + static_cast<size_t>(kRecBatchNum), n);
+
+        // 2. max_wh_ratio starts at the model's reference ratio (kRefImgWidth
+        // / kDstHeight) and is raised to the widest crop's own ratio in this
+        // batch — matches upstream exactly (see getTextLines() doc comment).
+        double maxWhRatio = static_cast<double>(kRefImgWidth) / kDstHeight;
+        std::vector<size_t> validIdx; // indices (into `order`) with a usable crop
+        for (size_t k = groupStart; k < groupEnd; k++) {
+            const cv::Mat& src = partImages[order[k]];
+            if (src.empty() || src.rows <= 0 || src.channels() != 3) {
+                lines[order[k]] = {"", {}}; // guard: degenerate crop upstream, or a
+                continue;                   // custom-pipeline crop with an unsupported channel count
+            }
+            maxWhRatio = std::max(maxWhRatio, static_cast<double>(src.cols) / src.rows);
+            validIdx.push_back(k);
+        }
+        if (validIdx.empty()) continue;
+
+        int batchWidth = static_cast<int>(kDstHeight * maxWhRatio); // truncating cast, matches upstream int()
+
+        // 3. Resize each valid crop to its own natural width (aspect-ratio
+        // preserved, height fixed), capped at batchWidth — narrower crops
+        // get zero-padded (in normalized space) inside runBatchInference().
+        std::vector<cv::Mat> resizedCrops;
+        resizedCrops.reserve(validIdx.size());
+        for (size_t k : validIdx) {
+            const cv::Mat& src = partImages[order[k]];
+            float ratio = static_cast<float>(src.cols) / static_cast<float>(src.rows);
+            int naturalWidth = static_cast<int>(std::ceil(kDstHeight * ratio));
+            int resizedWidth = std::min(naturalWidth, batchWidth);
+            resizedWidth = std::max(resizedWidth, 1); // guard: never resize to zero width
+            cv::Mat resized;
+            cv::resize(src, resized, cv::Size(resizedWidth, kDstHeight));
+            resizedCrops.push_back(std::move(resized));
+        }
+
+        auto batchResults = runBatch(resizedCrops, batchWidth);
+        for (size_t i = 0; i < validIdx.size() && i < batchResults.size(); i++) {
+            lines[order[validIdx[i]]] = std::move(batchResults[i]);
+        }
+    }
+
     return lines;
 }
 
