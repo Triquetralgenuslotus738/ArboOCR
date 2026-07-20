@@ -26,10 +26,8 @@ public:
 
     /// Classify each cropped text-line image's orientation (0 = upright,
     /// 1 = 180-degree rotated). If `doAngle` is false, returns index=-1 for
-    /// every image without touching the model (mirrors Python's
-    /// `use_angle_cls` toggle semantics — see engine.py comment on why
-    /// rapidocr v3 can't actually disable this stage, which this port CAN,
-    /// unlike the Python wrapper).
+    /// every image without touching the model — a genuine no-op skip, not
+    /// just a disabled post-filter.
     /// If `mostAngle` is true, all images are forced to the majority-vote
     /// angle across the batch (reduces flicker on noisy per-line angle
     /// classification for a single scanned page).
