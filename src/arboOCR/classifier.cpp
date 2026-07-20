@@ -3,33 +3,15 @@
 #include "arboOCR/classifier.hpp"
 
 #include <numeric>
-#include <unordered_map>
 
 #include <opencv2/imgproc.hpp>
 
 #include "arboOCR/ocr_utils.hpp"
+#include "ort_provider_utils.hpp"
 
 namespace arbo::ocr {
 
 namespace {
-
-std::vector<Ort::AllocatedStringPtr> getInputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    for (size_t i = 0; i < session->GetInputCount(); i++) {
-        names.push_back(session->GetInputNameAllocated(i, allocator));
-    }
-    return names;
-}
-
-std::vector<Ort::AllocatedStringPtr> getOutputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    for (size_t i = 0; i < session->GetOutputCount(); i++) {
-        names.push_back(session->GetOutputNameAllocated(i, allocator));
-    }
-    return names;
-}
 
 RawAngle scoreToAngle(const std::vector<float>& outputData) {
     int maxIndex = 0;
@@ -54,40 +36,19 @@ void Classifier::loadModel(const std::string& modelPath, bool useCuda,
     sessionOptions_.SetIntraOpNumThreads(0);
     sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-    if (useTensorrt) {
-        Ort::TensorRTProviderOptions trtOpts;
-        std::unordered_map<std::string, std::string> opts = {
-            {"device_id", "0"},
-            {"trt_max_workspace_size", "1073741824"},
-            {"trt_fp16_enable", "1"},
-            {"trt_engine_cache_enable", "1"},
-            // Input is always resized to kDstWidth x kDstHeight (192x48)
-            // before inference, so min=opt=max — one shape, ever.
-            {"trt_profile_min_shapes", "x:1x3x48x192"},
-            {"trt_profile_opt_shapes", "x:1x3x48x192"},
-            {"trt_profile_max_shapes", "x:1x3x48x192"},
-        };
-        if (!trtCacheDir.empty()) {
-            opts["trt_engine_cache_path"] = trtCacheDir;
-        }
-        trtOpts.Update(opts);
-        sessionOptions_.AppendExecutionProvider_TensorRT_V2(*trtOpts);
-    }
+    // Input is always resized to kDstWidth x kDstHeight (192x48) before
+    // inference, so min=opt=max — one shape, ever.
+    detail::configureExecutionProviders(sessionOptions_, useCuda, useTensorrt, trtCacheDir,
+        {"x:1x3x48x192", "x:1x3x48x192", "x:1x3x48x192"});
 
-    if (useCuda) {
-        OrtCUDAProviderOptions cudaOptions;
-        cudaOptions.device_id = 0;
-        cudaOptions.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
-        sessionOptions_.AppendExecutionProvider_CUDA(cudaOptions);
-    }
 #ifdef _WIN32
     std::wstring wpath(modelPath.begin(), modelPath.end());
     session_ = std::make_unique<Ort::Session>(env_, wpath.c_str(), sessionOptions_);
 #else
     session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
 #endif
-    inputNamesPtr_ = getInputNames(session_.get());
-    outputNamesPtr_ = getOutputNames(session_.get());
+    inputNamesPtr_ = detail::getInputNames(session_.get());
+    outputNamesPtr_ = detail::getOutputNames(session_.get());
 }
 
 RawAngle Classifier::getAngle(cv::Mat& src) {
@@ -107,6 +68,9 @@ RawAngle Classifier::getAngle(cv::Mat& src) {
 
     auto outShape = outputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
     int64_t outCount = std::accumulate(outShape.begin(), outShape.end(), int64_t{1}, std::multiplies<int64_t>());
+    if (outCount <= 0) {
+        return {-1, 0.0f}; // guard: unresolved/degenerate output shape
+    }
     float* raw = outputTensors.front().GetTensorMutableData<float>();
     std::vector<float> outputData(raw, raw + outCount);
     return scoreToAngle(outputData);
@@ -124,6 +88,10 @@ std::vector<RawAngle> Classifier::getAngles(std::vector<cv::Mat>& partImages, bo
     }
 
     for (size_t i = 0; i < n; i++) {
+        if (partImages[i].empty()) {
+            angles[i] = {-1, 0.0f}; // guard: e.g. a degenerate crop upstream (getRotateCropImage)
+            continue;
+        }
         cv::Mat resized;
         cv::resize(partImages[i], resized, cv::Size(kDstWidth, kDstHeight));
         angles[i] = getAngle(resized);

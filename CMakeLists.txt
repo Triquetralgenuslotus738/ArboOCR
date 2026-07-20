@@ -39,6 +39,7 @@ target_include_directories(arboocr_clipper PUBLIC vendor/rapidocronnx)
 
 # Core library.
 add_library(arboOCR STATIC
+    src/arboOCR/ort_provider_utils.cpp
     src/arboOCR/ocr_utils.cpp
     src/arboOCR/detector.cpp
     src/arboOCR/classifier.cpp

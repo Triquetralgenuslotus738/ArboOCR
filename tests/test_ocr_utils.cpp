@@ -56,3 +56,43 @@ TEST_CASE("matRotateClockWise180 flips both axes") {
     cv::Mat rotated = matRotateClockWise180(img.clone());
     CHECK(rotated.at<uchar>(9, 9) == 255); // should land at bottom-right
 }
+
+TEST_CASE("matRotateClockWise180 on an empty Mat returns empty, does not throw") {
+    cv::Mat empty;
+    CHECK_NOTHROW(matRotateClockWise180(empty).empty());
+}
+
+TEST_CASE("getRotateCropImage returns empty Mat for a degenerate (zero-area) box, does not throw") {
+    cv::Mat src = cv::Mat::zeros(100, 100, CV_8UC3);
+    // All 4 points identical -> zero width/height after the crop math.
+    std::vector<cv::Point> degenerateBox = {{10, 10}, {10, 10}, {10, 10}, {10, 10}};
+    cv::Mat result;
+    CHECK_NOTHROW(result = getRotateCropImage(src, degenerateBox));
+    CHECK(result.empty());
+}
+
+TEST_CASE("getRotateCropImage returns empty Mat for a box outside image bounds, does not throw") {
+    cv::Mat src = cv::Mat::zeros(100, 100, CV_8UC3);
+    std::vector<cv::Point> outOfBoundsBox = {{200, 200}, {250, 200}, {250, 250}, {200, 250}};
+    cv::Mat result;
+    CHECK_NOTHROW(result = getRotateCropImage(src, outOfBoundsBox));
+    CHECK(result.empty());
+}
+
+TEST_CASE("getRotateCropImage returns empty Mat for an empty source image, does not throw") {
+    cv::Mat empty;
+    std::vector<cv::Point> box = {{0, 0}, {10, 0}, {10, 10}, {0, 10}};
+    cv::Mat result;
+    CHECK_NOTHROW(result = getRotateCropImage(empty, box));
+    CHECK(result.empty());
+}
+
+TEST_CASE("getRotateCropImage still crops a valid box correctly (regression guard)") {
+    cv::Mat src = cv::Mat::zeros(100, 100, CV_8UC3);
+    src(cv::Rect(10, 10, 30, 30)).setTo(cv::Scalar(255, 255, 255));
+    std::vector<cv::Point> box = {{10, 10}, {40, 10}, {40, 40}, {10, 40}};
+    cv::Mat result = getRotateCropImage(src, box);
+    CHECK_FALSE(result.empty());
+    CHECK(result.cols > 0);
+    CHECK(result.rows > 0);
+}

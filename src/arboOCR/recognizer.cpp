@@ -8,33 +8,15 @@
 #include <fstream>
 #include <numeric>
 #include <sstream>
-#include <unordered_map>
 
 #include <opencv2/imgproc.hpp>
 
 #include "arboOCR/ocr_utils.hpp"
+#include "ort_provider_utils.hpp"
 
 namespace arbo::ocr {
 
 namespace {
-
-std::vector<Ort::AllocatedStringPtr> getInputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    for (size_t i = 0; i < session->GetInputCount(); i++) {
-        names.push_back(session->GetInputNameAllocated(i, allocator));
-    }
-    return names;
-}
-
-std::vector<Ort::AllocatedStringPtr> getOutputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    for (size_t i = 0; i < session->GetOutputCount(); i++) {
-        names.push_back(session->GetOutputNameAllocated(i, allocator));
-    }
-    return names;
-}
 
 template <typename ForwardIt>
 size_t argmax(ForwardIt first, ForwardIt last) {
@@ -52,41 +34,20 @@ void Recognizer::loadModel(const std::string& modelPath, bool useCuda,
     sessionOptions_.SetIntraOpNumThreads(0);
     sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-    if (useTensorrt) {
-        Ort::TensorRTProviderOptions trtOpts;
-        std::unordered_map<std::string, std::string> opts = {
-            {"device_id", "0"},
-            {"trt_max_workspace_size", "1073741824"},
-            {"trt_fp16_enable", "1"},
-            {"trt_engine_cache_enable", "1"},
-            // Height is fixed at kDstHeight=48; width varies with crop
-            // aspect ratio. Pin one profile range so ORT TRT never rebuilds
-            // per-shape (see TENSORRT_ENGINE_PORT_PLAN.md Opsi 1).
-            {"trt_profile_min_shapes", "x:1x3x48x32"},
-            {"trt_profile_opt_shapes", "x:1x3x48x320"},
-            {"trt_profile_max_shapes", "x:1x3x48x2048"},
-        };
-        if (!trtCacheDir.empty()) {
-            opts["trt_engine_cache_path"] = trtCacheDir;
-        }
-        trtOpts.Update(opts);
-        sessionOptions_.AppendExecutionProvider_TensorRT_V2(*trtOpts);
-    }
+    // Height is fixed at kDstHeight=48; width varies with crop aspect ratio.
+    // Pin one profile range so ORT TRT never rebuilds per-shape (see
+    // TENSORRT_ENGINE_PORT_PLAN.md Opsi 1).
+    detail::configureExecutionProviders(sessionOptions_, useCuda, useTensorrt, trtCacheDir,
+        {"x:1x3x48x32", "x:1x3x48x320", "x:1x3x48x2048"});
 
-    if (useCuda) {
-        OrtCUDAProviderOptions cudaOptions;
-        cudaOptions.device_id = 0;
-        cudaOptions.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
-        sessionOptions_.AppendExecutionProvider_CUDA(cudaOptions);
-    }
 #ifdef _WIN32
     std::wstring wpath(modelPath.begin(), modelPath.end());
     session_ = std::make_unique<Ort::Session>(env_, wpath.c_str(), sessionOptions_);
 #else
     session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
 #endif
-    inputNamesPtr_ = getInputNames(session_.get());
-    outputNamesPtr_ = getOutputNames(session_.get());
+    inputNamesPtr_ = detail::getInputNames(session_.get());
+    outputNamesPtr_ = detail::getOutputNames(session_.get());
 }
 
 void Recognizer::finalizeKeys(std::vector<std::string> rawKeys) {
@@ -177,6 +138,9 @@ RawTextLine Recognizer::getTextLine(const cv::Mat& src) {
     if (!session_) {
         return {"", {}}; // guard: unloaded model
     }
+    if (src.empty() || src.rows <= 0) {
+        return {"", {}}; // guard: e.g. a degenerate crop upstream (getRotateCropImage)
+    }
     float scale = static_cast<float>(kDstHeight) / static_cast<float>(src.rows);
     int dstWidth = static_cast<int>(static_cast<float>(src.cols) * scale);
     cv::Mat resized;
@@ -194,6 +158,9 @@ RawTextLine Recognizer::getTextLine(const cv::Mat& src) {
         Ort::RunOptions{nullptr}, inputNames.data(), &inputTensor, 1, outputNames.data(), 1);
 
     auto outShape = outputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
+    if (outShape.size() < 3 || outShape[1] <= 0 || outShape[2] <= 0) {
+        return {"", {}}; // guard: model output isn't the expected [batch, T, classes] shape
+    }
     int64_t outCount = std::accumulate(outShape.begin(), outShape.end(), int64_t{1}, std::multiplies<int64_t>());
     float* raw = outputTensors.front().GetTensorMutableData<float>();
     std::vector<float> outputData(raw, raw + outCount);

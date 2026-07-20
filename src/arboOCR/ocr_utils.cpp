@@ -140,16 +140,29 @@ std::vector<float> substractMeanNormalize(const cv::Mat& src, const float* meanV
 }
 
 cv::Mat getRotateCropImage(const cv::Mat& src, std::vector<cv::Point> box) {
+    // Guards below exist because this is a public function custom pipelines
+    // can call directly with arbitrary boxes (not just ones DBNet produced
+    // and already clamped to image bounds) — a degenerate box here used to
+    // throw a cv::Exception from warpPerspective/Rect deep inside OpenCV;
+    // it now returns an empty Mat instead, so callers can check `.empty()`
+    // like every other guard in this codebase.
+    if (src.empty() || box.size() != 4) {
+        return {};
+    }
+
     cv::Mat image;
     src.copyTo(image);
     std::vector<cv::Point> points = box;
 
     int collectX[4] = {box[0].x, box[1].x, box[2].x, box[3].x};
     int collectY[4] = {box[0].y, box[1].y, box[2].y, box[3].y};
-    int left = *std::min_element(collectX, collectX + 4);
-    int right = *std::max_element(collectX, collectX + 4);
-    int top = *std::min_element(collectY, collectY + 4);
-    int bottom = *std::max_element(collectY, collectY + 4);
+    int left = clampValue(*std::min_element(collectX, collectX + 4), 0, image.cols - 1);
+    int right = clampValue(*std::max_element(collectX, collectX + 4), 0, image.cols - 1);
+    int top = clampValue(*std::min_element(collectY, collectY + 4), 0, image.rows - 1);
+    int bottom = clampValue(*std::max_element(collectY, collectY + 4), 0, image.rows - 1);
+    if (right <= left || bottom <= top) {
+        return {}; // guard: degenerate/zero-area box after clamping to image bounds
+    }
 
     cv::Mat imgCrop;
     image(cv::Rect(left, top, right - left, bottom - top)).copyTo(imgCrop);
@@ -163,6 +176,9 @@ cv::Mat getRotateCropImage(const cv::Mat& src, std::vector<cv::Point> box) {
         std::pow(points[0].x - points[1].x, 2) + std::pow(points[0].y - points[1].y, 2)));
     int imgCropHeight = static_cast<int>(std::sqrt(
         std::pow(points[0].x - points[3].x, 2) + std::pow(points[0].y - points[3].y, 2)));
+    if (imgCropWidth <= 0 || imgCropHeight <= 0) {
+        return {}; // guard: box points collapsed to a line/point, no valid quad to warp
+    }
 
     cv::Point2f ptsDst[4] = {
         {0.f, 0.f}, {static_cast<float>(imgCropWidth), 0.f},
@@ -190,6 +206,9 @@ cv::Mat getRotateCropImage(const cv::Mat& src, std::vector<cv::Point> box) {
 }
 
 cv::Mat matRotateClockWise180(cv::Mat src) {
+    if (src.empty()) {
+        return src; // guard: e.g. a degenerate crop upstream (getRotateCropImage)
+    }
     cv::flip(src, src, 0);
     cv::flip(src, src, 1);
     return src;

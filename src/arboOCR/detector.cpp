@@ -3,37 +3,15 @@
 #include "arboOCR/detector.hpp"
 
 #include <numeric>
-#include <unordered_map>
 
 #include <opencv2/imgproc.hpp>
 
 #include "arboOCR/ocr_utils.hpp"
+#include "ort_provider_utils.hpp"
 
 namespace arbo::ocr {
 
 namespace {
-
-std::vector<Ort::AllocatedStringPtr> getInputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    size_t n = session->GetInputCount();
-    names.reserve(n);
-    for (size_t i = 0; i < n; i++) {
-        names.push_back(session->GetInputNameAllocated(i, allocator));
-    }
-    return names;
-}
-
-std::vector<Ort::AllocatedStringPtr> getOutputNames(Ort::Session* session) {
-    Ort::AllocatorWithDefaultOptions allocator;
-    std::vector<Ort::AllocatedStringPtr> names;
-    size_t n = session->GetOutputCount();
-    names.reserve(n);
-    for (size_t i = 0; i < n; i++) {
-        names.push_back(session->GetOutputNameAllocated(i, allocator));
-    }
-    return names;
-}
 
 std::vector<RawTextBox> findRsBoxes(
     const cv::Mat& predMat, const cv::Mat& dilateMat, const ScaleParam& s,
@@ -91,34 +69,11 @@ void Detector::loadModel(const std::string& modelPath, bool useCuda,
     sessionOptions_.SetIntraOpNumThreads(0);
     sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-    // TensorRT must be appended BEFORE CUDA (ORT tries providers in order)
-    if (useTensorrt) {
-        Ort::TensorRTProviderOptions trtOpts;
-        std::unordered_map<std::string, std::string> opts = {
-            {"device_id", "0"},
-            {"trt_max_workspace_size", "1073741824"}, // 1GB
-            {"trt_fp16_enable", "1"},
-            {"trt_engine_cache_enable", "1"},
-            // Fixed profile range covers detLimitSideLen (default 1536) and
-            // larger inputs without triggering an ORT TRT rebuild per image
-            // shape (see TENSORRT_ENGINE_PORT_PLAN.md Opsi 1).
-            {"trt_profile_min_shapes", "x:1x3x32x32"},
-            {"trt_profile_opt_shapes", "x:1x3x1536x1536"},
-            {"trt_profile_max_shapes", "x:1x3x2048x2048"},
-        };
-        if (!trtCacheDir.empty()) {
-            opts["trt_engine_cache_path"] = trtCacheDir;
-        }
-        trtOpts.Update(opts);
-        sessionOptions_.AppendExecutionProvider_TensorRT_V2(*trtOpts);
-    }
-
-    if (useCuda) {
-        OrtCUDAProviderOptions cudaOptions;
-        cudaOptions.device_id = 0;
-        cudaOptions.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
-        sessionOptions_.AppendExecutionProvider_CUDA(cudaOptions);
-    }
+    // Fixed profile range covers detLimitSideLen (default 1536) and larger
+    // inputs without triggering an ORT TRT rebuild per image shape (see
+    // TENSORRT_ENGINE_PORT_PLAN.md Opsi 1).
+    detail::configureExecutionProviders(sessionOptions_, useCuda, useTensorrt, trtCacheDir,
+        {"x:1x3x32x32", "x:1x3x1536x1536", "x:1x3x2048x2048"});
 
 #ifdef _WIN32
     std::wstring wpath(modelPath.begin(), modelPath.end());
@@ -126,8 +81,8 @@ void Detector::loadModel(const std::string& modelPath, bool useCuda,
 #else
     session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
 #endif
-    inputNamesPtr_ = getInputNames(session_.get());
-    outputNamesPtr_ = getOutputNames(session_.get());
+    inputNamesPtr_ = detail::getInputNames(session_.get());
+    outputNamesPtr_ = detail::getOutputNames(session_.get());
 }
 
 std::vector<RawTextBox> Detector::getTextBoxes(
@@ -153,6 +108,9 @@ std::vector<RawTextBox> Detector::getTextBoxes(
         Ort::RunOptions{nullptr}, inputNames.data(), &inputTensor, 1, outputNames.data(), 1);
 
     auto outShape = outputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
+    if (outShape.size() < 4 || outShape[2] <= 0 || outShape[3] <= 0) {
+        return {}; // guard: model output isn't the expected NCHW prob map
+    }
     int64_t outCount = std::accumulate(outShape.begin(), outShape.end(), int64_t{1}, std::multiplies<int64_t>());
     float* raw = outputTensors.front().GetTensorMutableData<float>();
 
