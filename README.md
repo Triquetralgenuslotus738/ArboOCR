@@ -59,10 +59,12 @@ header set, and point the build at a CUDA/TensorRT-enabled `libonnxruntime.so`
 ```bash
 sudo apt install -y libopencv-dev libcurl4-openssl-dev doctest-dev cxxopts-dev cmake build-essential
 
-# onnxruntime C++ headers (the pip wheel ships none) — match your runtime version:
+# onnxruntime C++ headers (the pip wheel ships none). Use the latest release
+# tarball whose headers are ABI-compatible with your installed runtime — e.g.
+# v1.27.1 headers work against a 1.28.x runtime .so (the C API is stable):
 mkdir -p vendor/onnxruntime && cd vendor/onnxruntime
-curl -sL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-linux-aarch64-1.28.0.tgz
-tar xzf ort.tgz && rm ort.tgz && mv onnxruntime-linux-aarch64-1.28.0 dist
+curl -sL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.27.1/onnxruntime-linux-aarch64-1.27.1.tgz
+tar xzf ort.tgz && rm ort.tgz && mv onnxruntime-linux-aarch64-1.27.1 dist
 cd ../..
 
 cmake --preset jetson \
