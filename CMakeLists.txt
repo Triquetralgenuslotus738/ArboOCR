@@ -102,3 +102,6 @@ if(ARBOOCR_USE_SYSTEM_DEPS)
     set_target_properties(arboocr_demo PROPERTIES
         INSTALL_RPATH "${ARBOOCR_ORT_LIB_DIR}" BUILD_WITH_INSTALL_RPATH TRUE)
 endif()
+
+# Buildable usage examples (see examples/README.md).
+add_subdirectory(examples)

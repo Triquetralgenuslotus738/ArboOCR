@@ -79,6 +79,11 @@ Lines: 31 (402.053 ms)
   ...
 ```
 
+More usage patterns — including driving `Detector`/`Classifier`/`Recognizer`
+directly instead of the `Engine` facade — are in
+[`examples/`](examples/), as small buildable programs you can run
+immediately, not just read.
+
 ## Build
 
 arboOCR ships three CMake presets. Pick the one matching your target.
@@ -347,6 +352,7 @@ arboOCR/
 ├── include/arboOCR/     public headers — this is the whole API surface
 ├── src/arboOCR/         implementation
 ├── cli/                 arboocr_demo — reference CLI usage
+├── examples/            basic_recognize, custom_pipeline — buildable, runnable
 ├── tests/               doctest suite (buildable, runnable via ctest)
 ├── vendor/               Clipper (vendored) + onnxruntime (user-provisioned)
 └── docs/                 verification notes from real hardware testing
