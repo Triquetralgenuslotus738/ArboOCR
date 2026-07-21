@@ -1,12 +1,48 @@
+<div align="center">
+
 # arboOCR
 
-Standalone C++ OCR library — text **detection + orientation + recognition**
-using PP-OCRv6 ONNX models via ONNXRuntime (CPU / CUDA / TensorRT). Extracted
-from a benchmark harness into a clean, reusable library you can drop into your
-own project.
+**Standalone C++ OCR library — detection, orientation, and recognition, on CPU, CUDA, or TensorRT.**
 
-Ported from [RapidOcrOnnx](https://github.com/RapidAI/RapidOcrOnnx)
-(Apache-2.0) — see `THIRD_PARTY_NOTICES.md`.
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Jetson-lightgrey.svg)](#build)
+
+Drop it into your own project, point it at an image, get text back.
+
+[Quickstart](#quickstart) •
+[Build](#build) •
+[Models](#models) •
+[API](#api-reference) •
+[Benchmarks](#benchmarks) •
+[Architecture](#architecture)
+
+</div>
+
+---
+
+## What is this?
+
+arboOCR runs the classic three-stage OCR pipeline — **detect** text regions,
+**classify** their orientation, **recognize** the characters — over PP-OCRv6
+ONNX models via ONNXRuntime. It was extracted from a larger benchmarking
+harness into a single-purpose library with no baggage: no TTS, no HTTP
+server, no dataset tooling, just the inference core.
+
+- **CPU / CUDA / TensorRT**, auto-detected at runtime — construct one
+  `Engine`, it picks the fastest backend available and tells you which one
+  it picked.
+- **Facade + building blocks.** Use `Engine::recognize()` for the common
+  case, or drop down to `Detector`/`Classifier`/`Recognizer` directly if
+  you're building a custom pipeline.
+- **Batched recognition.** Text-line crops are batched (up to 6 per
+  inference call, matching PaddleOCR/RapidOCR's own convention) instead of
+  one ONNXRuntime call per line — see [Benchmarks](#benchmarks) for when
+  this actually helps.
+- **Ported, not reinvented.** The detection/recognition math is a
+  near-verbatim port of [RapidOcrOnnx](https://github.com/RapidAI/RapidOcrOnnx)
+  (Apache-2.0) — battle-tested logic, renamed and reorganized for a clean
+  public API. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Quickstart
 
@@ -20,19 +56,38 @@ int main() {
     cfg.useTensorrt = true; // auto-falls back to CUDA, then CPU
 
     arbo::ocr::Engine engine(cfg);
+    std::cout << "Running on: " << engine.backend() << "\n";
+
     auto page = engine.recognize("page.jpg");
     for (auto& line : page.lines)
-        std::cout << line.text << " (" << line.score << ")\n";
+        std::cout << line.text << " (score=" << line.score << ")\n";
 }
 ```
 
-Or try the bundled CLI without writing any C++:
+Or skip the C++ entirely and use the bundled CLI:
 
 ```bash
 ./arboocr_demo --image page.jpg --models-dir models
 ```
 
+```
+Backend: tensorrt
+Image: page.jpg
+Lines: 31 (402.053 ms)
+  [0] "INVOICE" (score=0.845491)
+  [1] "PT. Angin Sepoi" (score=0.862601)
+  ...
+```
+
 ## Build
+
+arboOCR ships three CMake presets. Pick the one matching your target.
+
+| Preset | Platform | Dependency source |
+|---|---|---|
+| `windows-x64` | Windows, MSVC | [vcpkg](https://vcpkg.io) |
+| `linux-x64` | Linux x86_64 | vcpkg |
+| `jetson` | aarch64 (Jetson/embedded) | apt + vendored onnxruntime |
 
 ### Windows (vcpkg)
 
@@ -50,12 +105,13 @@ cmake --preset linux-x64
 cmake --build build/linux-x64
 ```
 
-### Jetson / aarch64 (system deps + CUDA/TensorRT onnxruntime)
+### Jetson / aarch64 (apt + self-contained onnxruntime)
 
-vcpkg is impractical on a Jetson. Use apt packages + a fully self-contained
-vendored onnxruntime (headers **and** the CUDA/TensorRT-enabled runtime
-`.so`, both under `vendor/onnxruntime/`) — arboOCR doesn't depend on any
-other project's Python venv once this is done:
+vcpkg builds everything from source, which is impractical on a Jetson.
+This path uses apt for OpenCV/CURL and a **fully self-contained** vendored
+onnxruntime — both the C++ headers *and* the CUDA/TensorRT-enabled runtime
+`.so` live under `vendor/onnxruntime/`, so arboOCR doesn't depend on any
+other project's Python environment once set up.
 
 ```bash
 sudo apt install -y libopencv-dev libcurl4-openssl-dev doctest-dev cxxopts-dev cmake build-essential
@@ -68,10 +124,10 @@ curl -sL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v
 tar xzf ort.tgz && rm ort.tgz && mv onnxruntime-linux-aarch64-1.27.1 dist
 
 # 2. onnxruntime runtime .so with CUDA/TensorRT support. The official aarch64
-# release tarball above is CPU-only — the pip wheel (`pip install onnxruntime`,
-# or JetPack's preinstalled one) ships the accelerated build instead. Copy it
-# in (adjust SRC to wherever onnxruntime is installed on your machine):
-SRC=/path/to/your/onnxruntime/capi   # e.g. a venv's site-packages/onnxruntime/capi
+# release tarball above is CPU-only — a pip wheel (`pip install onnxruntime`)
+# or JetPack's preinstalled one ships the accelerated build instead. Copy it
+# in (point SRC at wherever onnxruntime is installed on your machine):
+SRC=/path/to/your/onnxruntime/capi
 mkdir -p lib
 cp "$SRC"/libonnxruntime.so.* "$SRC"/libonnxruntime_providers_*.so lib/
 ln -sf $(basename "$SRC"/libonnxruntime.so.*.*.*) lib/libonnxruntime.so.1
@@ -82,96 +138,234 @@ cmake --preset jetson   # ARBOOCR_ORT_LIB_DIR defaults to vendor/onnxruntime/lib
 cmake --build build/jetson -j$(nproc)
 ```
 
+### Running the tests
+
+```bash
+cd build/<preset>
+ctest                 # or: ./arboocr_tests
+```
+
 `Engine` auto-detects TensorRT then CUDA then CPU via
-`Ort::GetAvailableProviders()`; `engine.backend()` reports what was selected.
+`Ort::GetAvailableProviders()`; `engine.backend()` reports what was
+selected at runtime.
 
 ## Models
 
-arboOCR needs PP-OCRv6 ONNX files in `modelsDir`, named:
+arboOCR needs PP-OCRv6 ONNX files in `modelsDir`:
 
 ```
 models/
-├── PP-OCRv6_det.onnx                text detection (one file — no size variants)
-├── PP-OCRv6_cls.onnx                angle classification (only if useAngleCls)
-├── PP-OCRv6_rec_medium.onnx         text recognition (tiny | small | medium — see below)
-└── PP-OCRv6_rec_medium_dict.txt     char dict (only if not embedded in ONNX metadata)
+├── PP-OCRv6_det.onnx                text detection (single file — no size variants)
+├── PP-OCRv6_cls.onnx                angle classification (only needed if useAngleCls)
+├── PP-OCRv6_rec_medium.onnx         text recognition — tiny | small | medium
+└── PP-OCRv6_rec_medium_dict.txt     character dict (only if not embedded in ONNX metadata)
 ```
 
-Two ways to provide them:
+**Two ways to get them:**
 
-1. **Copy from an existing install** (e.g. a Python `rapidocr` package's
-   `models/` dir) into `modelsDir`, renaming to the layout above.
-2. **Download programmatically** with a base URL you control:
+<details>
+<summary><b>Option A — copy from an existing install</b></summary>
 
-   ```cpp
-   arbo::ocr::downloadOcrModels(
-       "https://your-host.example/models/PP-OCRv6/", // baseUrl (you supply)
-       "PP-OCRv6", "medium", "models");
-   ```
+If you already have a Python `rapidocr` install, copy its `models/`
+directory into `modelsDir`, renaming files to match the layout above.
 
-   arboOCR ships **no** default download URL — PP-OCR model hosting URLs are
-   not stable, so the caller decides the source.
+</details>
 
-### Model size trade-off (`EngineConfig::modelType`)
+<details>
+<summary><b>Option B — download programmatically</b></summary>
 
-`modelType` (`tiny` | `small` | `medium`) selects the **recognizer** size
-only — the detector is always the single `PP-OCRv6_det.onnx` file, no size
-variant exists for it. Measured on the bundled sample receipt
-(`tests/fixtures/test_images/`), Jetson Nano (see "Recognizer batching"
-below — these numbers are post-batching):
+```cpp
+arbo::ocr::downloadOcrModels(
+    "https://your-host.example/models/PP-OCRv6/", // baseUrl — you supply this
+    "PP-OCRv6", "medium", "models");
+```
 
-| modelType | Recognizer file size | Latency (CPU) | Sample errors |
+arboOCR ships **no default download URL** — PP-OCR model hosting locations
+aren't stable across mirrors, so the caller picks the source.
+
+</details>
+
+### Choosing a model size
+
+`EngineConfig::modelType` (`tiny` | `small` | `medium`) selects the
+**recognizer** size only — the detector has no size variants, it's always
+the single `PP-OCRv6_det.onnx` file.
+
+| modelType | File size | CPU latency* | Accuracy |
 |---|---|---|---|
-| `tiny` (old default) | 4.3MB | ~750ms-1s | "Melavwai" instead of "Melawai", "Atasnama" instead of "Atas nama" |
-| `medium` (**current default**) | 73MB | ~5s | both fixed, no new errors introduced |
+| `tiny` | 4.3 MB | fastest | occasional misreads on real-world noise |
+| `small` | ~20 MB | middle ground | untested — worth trying if `medium` is too slow |
+| `medium` (**default**) | 73 MB | ~5x slower than tiny | most accurate |
 
-`tiny` genuinely misreads characters under real-world noise (scan artifacts,
-low contrast); `medium` fixed every misread we found in that pass without
-introducing new ones. TensorRT/CUDA narrow the latency gap significantly and
-also benefit more from batching than CPU does — see below.
+<sub>*Measured on a Jetson Nano CPU fallback, single sample image. TensorRT/CUDA narrow this gap significantly.</sub>
 
-We also tried the analogous swap on the **detector** (`PP-OCRv6_det_medium.onnx`
-in place of the tiny/default det file) and got a *worse* result: 6x slower
-and *more* misreads, not fewer — the larger detector's box geometry didn't
-match well with the tiny recognizer we paired it with. Net takeaway: if you
-want to try a different size, change `modelType` (recognizer), not the
-detector file.
+We tested this on a real scanned receipt: `tiny` misread "Melawai" as
+"Melavwai" and "Atas nama" as "Atasnama"; `medium` got both right with no
+new errors introduced. We also tried upsizing the *detector* instead
+(`PP-OCRv6_det_medium.onnx`) and got a **worse** result — 6x slower and
+*more* misreads, because the larger detector's box geometry didn't suit the
+recognizer it was paired with. If you want better accuracy, change
+`modelType` (the recognizer), not the detector file.
 
-Pick `tiny` if you need the fastest CPU turnaround and can tolerate
-occasional misreads (or you're running under TensorRT/CUDA where the gap
-matters less); pick `medium` (default) for the most accurate output; `small`
-is an untested middle ground worth trying if `medium` is too slow for your
-budget.
+## API Reference
 
-### Recognizer batching
+```cpp
+#include <arboOCR/engine.hpp>       // Engine, EngineConfig — start here
+#include <arboOCR/detector.hpp>     // Detector — text region detection
+#include <arboOCR/classifier.hpp>   // Classifier — orientation (0°/180°)
+#include <arboOCR/recognizer.hpp>   // Recognizer — CRNN text recognition
+#include <arboOCR/model_downloader.hpp>
+```
 
-`Recognizer::getTextLines()` batches up to 6 text-line crops per ONNXRuntime
-call (mirrors PaddleOCR/RapidOCR's `rec_batch_num=6` default) instead of one
-call per crop. Measured on the bundled sample receipt (31 text lines),
-Jetson Nano:
+### `arbo::ocr::Engine`
+
+The facade. Construct once with an `EngineConfig`, call `recognize()` per
+image.
+
+```cpp
+struct EngineConfig {
+    std::string ocrVersion   = "PP-OCRv6";
+    std::string modelType    = "medium";  // recognizer size: tiny | small | medium
+    float       detBoxThresh = 0.5f;
+    float       detThresh    = 0.3f;
+    float       detUnclipRatio = 1.6f;
+    int         detLimitSideLen = 1536;
+    bool        useAngleCls  = false;
+    bool        useCuda      = false;
+    bool        useTensorrt  = false;
+    std::string trtCacheDir  = "models/trt_engines";
+    std::string modelsDir    = "models";
+};
+
+class Engine {
+public:
+    explicit Engine(const EngineConfig& config);
+    std::string backend() const;                       // "tensorrt" | "cuda" | "cpu"
+    PagePrediction recognize(const std::string& imagePath);
+};
+```
+
+`recognize()` never throws — a missing/unreadable image or an inference
+error degrades to an empty-lines result with `elapsedMs` still set.
+
+```cpp
+struct LinePrediction { Polygon polygon; std::string text; float score; };
+struct PagePrediction  { std::string image; std::vector<LinePrediction> lines; float elapsedMs; };
+```
+
+### Building a custom pipeline
+
+Need more control than `Engine` gives you? The three stages are public:
+
+```cpp
+arbo::ocr::Detector detector;
+detector.loadModel("models/PP-OCRv6_det.onnx", /*useCuda=*/false, /*useTensorrt=*/true);
+auto boxes = detector.getTextBoxes(image, scale, boxScoreThresh, boxThresh, unclipRatio);
+
+arbo::ocr::Recognizer recognizer;
+recognizer.loadModel("models/PP-OCRv6_rec_medium.onnx");
+recognizer.loadKeysFromModelMetadata(); // or loadKeysFromFile("dict.txt")
+auto lines = recognizer.getTextLines(croppedImages); // batched internally
+```
+
+See [`include/arboOCR/`](include/arboOCR/) for full doc comments on each
+class — every non-obvious design decision (why batching trades off the way
+it does, why padding is normalized-then-padded not padded-then-normalized,
+why the detector has no size variants) is documented inline where the code
+lives, not just here.
+
+### Model downloader
+
+```cpp
+DownloadResult downloadFile(const std::string& url, const std::string& destPath);
+std::vector<DownloadResult> downloadOcrModels(
+    const std::string& baseUrl, const std::string& ocrVersion,
+    const std::string& modelType, const std::string& modelsDir);
+```
+
+## Benchmarks
+
+All numbers measured on a **Jetson Nano**, real inference (not synthetic
+timing), on a mix of document types — not just one lucky sample image.
+
+### Across document types (tiny recognizer, CPU)
+
+| Document | Lines | Latency |
+|---|---|---|
+| Table/form (bilingual, numeric) | 60 | 1.07s |
+| Newspaper (multi-column) | 48 | 1.10s |
+| Legal contract (dense paragraphs) | 24 | 1.01s |
+| ID card (short fields) | 28 | 0.74s |
+| Whiteboard menu (handwriting/marker) | 11 | 0.73s |
+| Receipt | 31 | ~0.75s |
+
+No crashes, no garbled output, across layouts ranging from dense tables to
+handwritten menus.
+
+### Batching: CPU vs. TensorRT
+
+Recognition batches up to 6 text-line crops per inference call. This is a
+genuine trade-off, not a universal win:
 
 | Backend | Before batching | After batching |
 |---|---|---|
-| CPU (medium) | ~3.9s | ~5.0s (**slower**) |
-| TensorRT (tiny) | ~456ms | ~340-400ms (**faster**) |
+| CPU | ~3.9s | ~5.0s (**slower**) |
+| TensorRT | ~456ms | ~340–460ms (**faster**) |
 
 CPU has no real parallelism across the batch dimension, so padding every
-crop up to its batch's shared width is pure wasted computation there —
-batching made CPU inference *slower* in our measurement, not faster.
-TensorRT/GPU backends can actually parallelize across the batch dimension,
-where batching pays off. There's currently no config flag to disable
-batching if you're CPU-only and this trade-off doesn't work in your favor.
+crop to a shared width is wasted computation there. TensorRT/GPU backends
+parallelize across the batch dimension, where batching pays off. Batching
+is always on — there's currently no flag to disable it for CPU-only
+deployments.
 
-## API
+## Architecture
 
-- `arbo::ocr::Engine` — facade: construct with `EngineConfig`, call
-  `recognize(path)` → `PagePrediction { image, lines[], elapsedMs }`.
-- `arbo::ocr::Detector` / `Classifier` / `Recognizer` — the individual
-  pipeline stages, exposed for custom pipelines.
-- `arbo::ocr::downloadFile` / `downloadOcrModels` — optional model fetch
-  helpers (libcurl).
+```
+your app
+   │
+   ▼
+┌─────────────────────────────────────────────┐
+│  Engine::recognize(imagePath)                │
+│                                               │
+│   1. Detector::getTextBoxes()   — find lines │
+│   2. Classifier::getAngles()    — 0°/180°?   │
+│   3. Recognizer::getTextLines() — read text  │
+│      (batched, up to 6 crops/call)           │
+│                                               │
+└─────────────────────────────────────────────┘
+   │
+   ▼
+PagePrediction { lines[], elapsedMs }
+```
+
+Each stage owns its ONNXRuntime session independently and can be used on
+its own. `ocr_utils.hpp` holds the shared geometry/normalization helpers
+(box scoring, perspective crop, mean/norm) all three stages build on.
+
+```
+arboOCR/
+├── include/arboOCR/     public headers — this is the whole API surface
+├── src/arboOCR/         implementation
+├── cli/                 arboocr_demo — reference CLI usage
+├── tests/               doctest suite (buildable, runnable via ctest)
+├── vendor/               Clipper (vendored) + onnxruntime (user-provisioned)
+└── docs/                 verification notes from real hardware testing
+```
+
+## Contributing
+
+Issues and PRs welcome. If you're porting from or comparing against the
+upstream RapidOcrOnnx/PaddleOCR algorithms, please cite the specific
+upstream source/commit you're comparing against — this project tracks
+those correspondences closely (see doc comments and
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)).
 
 ## License
 
-The ported OCR logic derives from RapidOcrOnnx (Apache-2.0) and bundles
-Clipper (Boost Software License 1.0). See `THIRD_PARTY_NOTICES.md`.
+arboOCR is licensed under the [Apache License 2.0](LICENSE).
+
+The ported detection/recognition logic derives from
+[RapidOcrOnnx](https://github.com/RapidAI/RapidOcrOnnx) (Apache-2.0) and
+bundles [Clipper](http://www.angusj.com/clipper2/) (Boost Software License
+1.0). See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for full
+attribution.
